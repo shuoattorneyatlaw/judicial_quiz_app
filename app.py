@@ -4,7 +4,7 @@ import json
 import random
 
 # 設定網頁標題與手機版面配置
-st.set_page_config(page_title="國考一試刷題神器", page_icon="⚖️", layout="centered")
+st.set_page_config(page_title="司律一試刷題", page_icon="⚖️", layout="centered")
 
 # 讀取題庫
 @st.cache_data
@@ -47,7 +47,7 @@ def draw_ten_questions():
 def submit_quiz():
     st.session_state.is_submitted = True
 
-st.title("⚖️ 司法官/律師 一試刷題神器")
+st.title("⚖️ 司律 一試 刷題")
 st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
 
 # 開頭的初始抽題按鈕
