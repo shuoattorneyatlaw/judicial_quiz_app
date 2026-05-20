@@ -26,35 +26,32 @@ if 'user_answers' not in st.session_state:
 if 'is_submitted' not in st.session_state:
     st.session_state.is_submitted = False
 
-# 【新增核心功能】抽取 10 題且排除上一輪題目的邏輯
+# 【修正重點 1】將抽題邏輯改為給 on_click 專用的 Callback 函數
 def draw_ten_questions():
-    # 取得當前題目的識別特徵 (年度, 科目, 原題號)
     current_ids = [(q['year'], q['subject'], q['q_num']) for q in st.session_state.get('current_quiz', [])]
-    
-    # 從總題庫中排除剛才出現過的題目
     available_pool = [q for q in quiz_data if (q['year'], q['subject'], q['q_num']) not in current_ids]
     
-    # 防呆機制：如果剩餘題庫不足 10 題，就用回完整題庫
     if len(available_pool) < 10:
         available_pool = quiz_data
         
-    # 隨機抽取 10 題
     st.session_state.current_quiz = random.sample(available_pool, min(10, len(available_pool)))
     st.session_state.user_answers = {}
     st.session_state.is_submitted = False
     
-    # 【核心功能】將所有單選鈕作答位置強制歸位回到未作答
+    # 【修正重點 2】使用 del 刪除狀態，讓 Streamlit 自動重置為預設選項
     for i in range(10):
         if f"q_{i}" in st.session_state:
-            st.session_state[f"q_{i}"] = "(未作答)"
+            del st.session_state[f"q_{i}"]
+
+# 【新增】將交卷動作也寫成 Callback 函數
+def submit_quiz():
+    st.session_state.is_submitted = True
 
 st.title("⚖️ 司法官/律師 一試刷題神器")
 st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
 
-# 開頭的初始抽題按鈕
-if st.button("🎲 隨機抽取 10 題", type="primary"):
-    draw_ten_questions()
-    st.rerun()
+# 開頭的初始抽題按鈕 (使用 on_click 觸發)
+st.button("🎲 隨機抽取 10 題", type="primary", on_click=draw_ten_questions)
 
 st.divider()
 
@@ -141,19 +138,16 @@ if st.session_state.current_quiz:
 
     # 底部控制按鈕區
     if not st.session_state.is_submitted:
-        if st.button("📝 提交答案", type="secondary"):
-            st.session_state.is_submitted = True
-            st.rerun()
+        # 【修正重點 3】提交答案同樣使用 on_click 觸發
+        st.button("📝 提交答案", type="secondary", on_click=submit_quiz)
     else:
-        # 計算總分 (滿分改為 10 題)
+        # 計算總分
         score = sum(1 for i, q in enumerate(st.session_state.current_quiz) 
                     if st.session_state.user_answers.get(i) == q['answer'])
         st.info(f"🏆 測驗結束！你答對了 **{score} / 10** 題！")
         
-        # 【新增功能】位於計分結果正下方的「再抽 10 題不重複」按鈕
-        if st.button("🔄 重新隨機抽取下一輪 10 題 (不與此輪重複)", type="primary"):
-            draw_ten_questions()
-            st.rerun()
+        # 【修正重點 4】再抽 10 題按鈕使用 on_click 觸發
+        st.button("🔄 重新隨機抽取下一輪 10 題 (不與此輪重複)", type="primary", on_click=draw_ten_questions)
             
         st.balloons()
 else:
