@@ -30,8 +30,8 @@ st.title("⚖️ 司法官/律師 一試刷題工具")
 st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
 
 # 按鈕：抽取新題目
-if st.button("🎲 隨機抽取 5 題", type="primary"):
-    st.session_state.current_quiz = random.sample(quiz_data, min(5, len(quiz_data)))
+if st.button("🎲 隨機抽取 10 題", type="primary"):
+    st.session_state.current_quiz = random.sample(quiz_data, min(10, len(quiz_data)))
     st.session_state.user_answers = {}
     st.session_state.is_submitted = False
     st.rerun()
