@@ -4,9 +4,9 @@ import json
 import random
 
 # 設定網頁標題與手機版面配置
-st.set_page_config(page_title="司律一試刷題工具", page_icon="⚖️", layout="centered")
+st.set_page_config(page_title="國考一試刷題神器", page_icon="⚖️", layout="centered")
 
-# 讀取剛剛做好的題庫 (使用 cache 讓網頁瞬間載入)
+# 讀取題庫 (使用 cache 讓網頁瞬間載入)
 @st.cache_data
 def load_data():
     with open('quiz_database.json', 'r', encoding='utf-8') as f:
@@ -26,14 +26,34 @@ if 'user_answers' not in st.session_state:
 if 'is_submitted' not in st.session_state:
     st.session_state.is_submitted = False
 
-st.title("⚖️ 司律 一試刷題工具")
-st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
-
-# 按鈕：抽取新題目
-if st.button("🎲 隨機抽取 10 題", type="primary"):
-    st.session_state.current_quiz = random.sample(quiz_data, min(10, len(quiz_data)))
+# 【新增核心功能】抽取 10 題且排除上一輪題目的邏輯
+def draw_ten_questions():
+    # 取得當前題目的識別特徵 (年度, 科目, 原題號)
+    current_ids = [(q['year'], q['subject'], q['q_num']) for q in st.session_state.get('current_quiz', [])]
+    
+    # 從總題庫中排除剛才出現過的題目
+    available_pool = [q for q in quiz_data if (q['year'], q['subject'], q['q_num']) not in current_ids]
+    
+    # 防呆機制：如果剩餘題庫不足 10 題，就用回完整題庫
+    if len(available_pool) < 10:
+        available_pool = quiz_data
+        
+    # 隨機抽取 10 題
+    st.session_state.current_quiz = random.sample(available_pool, min(10, len(available_pool)))
     st.session_state.user_answers = {}
     st.session_state.is_submitted = False
+    
+    # 【核心功能】將所有單選鈕作答位置強制歸位回到未作答
+    for i in range(10):
+        if f"q_{i}" in st.session_state:
+            st.session_state[f"q_{i}"] = "(未作答)"
+
+st.title("⚖️ 司法官/律師 一試刷題神器")
+st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
+
+# 開頭的初始抽題按鈕
+if st.button("🎲 隨機抽取 10 題", type="primary"):
+    draw_ten_questions()
     st.rerun()
 
 st.divider()
@@ -52,6 +72,7 @@ if st.session_state.current_quiz:
         
         options = ["(未作答)", "A", "B", "C", "D"]
         
+        # 單選按鈕
         user_choice = st.radio(
             "請選擇你的作答：", 
             options, 
@@ -62,7 +83,7 @@ if st.session_state.current_quiz:
         if user_choice != "(未作答)":
             st.session_state.user_answers[i] = user_choice
         
-        # === 交卷後的解析與一鍵跳轉功能 ===
+        # 交卷後的解析與一鍵跳轉
         if st.session_state.is_submitted:
             correct_ans = q['answer']
             if user_choice == correct_ans:
@@ -70,13 +91,9 @@ if st.session_state.current_quiz:
             else:
                 st.error(f"❌ 答錯了！你的答案: {user_choice if user_choice != '(未作答)' else '未作答'}，正確答案是: {correct_ans}")
             
-            # 自動組裝給 Gemini 的發問詞
             gemini_prompt = f"請幫我詳細解析這道司法官/律師一試考古題：\n\n{formatted_text}\n\n官方標準答案是 ({correct_ans})。\n請說明為什麼這個答案是正確的，並解析其他三個選項錯在哪裡、涉及哪些法條或實務見解？"
-            
-            # 將 Python 字串轉為安全的 JavaScript 字串
             js_text = json.dumps(gemini_prompt)
             
-            # 建立帶有複製並跳轉功能的特製 HTML 按鈕
             html_code = f"""
             <div style="font-family: 'Source Sans Pro', sans-serif;">
                 <button onclick='copyAndOpen()' style="
@@ -101,7 +118,6 @@ if st.session_state.current_quiz:
                 navigator.clipboard.writeText(text).then(function() {{
                     window.open('https://gemini.google.com/', '_blank');
                 }}).catch(function(err) {{
-                    // 備用複製方案 (針對部分手機瀏覽器限制)
                     const textArea = document.createElement("textarea");
                     textArea.value = text;
                     textArea.style.position = "fixed"; 
@@ -119,21 +135,26 @@ if st.session_state.current_quiz:
             }}
             </script>
             """
-            # 渲染這個特製按鈕
             components.html(html_code, height=60)
             
         st.write("---")
 
-    # 交卷按鈕
+    # 底部控制按鈕區
     if not st.session_state.is_submitted:
         if st.button("📝 提交答案", type="secondary"):
             st.session_state.is_submitted = True
             st.rerun()
     else:
-        # 計算總分
+        # 計算總分 (滿分改為 10 題)
         score = sum(1 for i, q in enumerate(st.session_state.current_quiz) 
                     if st.session_state.user_answers.get(i) == q['answer'])
         st.info(f"🏆 測驗結束！你答對了 **{score} / 10** 題！")
+        
+        # 【新增功能】位於計分結果正下方的「再抽 10 題不重複」按鈕
+        if st.button("🔄 重新隨機抽取下一輪 10 題 (不與此輪重複)", type="primary"):
+            draw_ten_questions()
+            st.rerun()
+            
         st.balloons()
 else:
     st.info("請點擊上方的「隨機抽取 10 題」開始測驗！")
