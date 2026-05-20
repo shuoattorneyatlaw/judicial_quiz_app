@@ -6,7 +6,7 @@ import random
 # 設定網頁標題與手機版面配置
 st.set_page_config(page_title="國考一試刷題神器", page_icon="⚖️", layout="centered")
 
-# 讀取題庫 (使用 cache 讓網頁瞬間載入)
+# 讀取題庫
 @st.cache_data
 def load_data():
     with open('quiz_database.json', 'r', encoding='utf-8') as f:
@@ -25,8 +25,11 @@ if 'user_answers' not in st.session_state:
     st.session_state.user_answers = {}
 if 'is_submitted' not in st.session_state:
     st.session_state.is_submitted = False
+# 【新增】用來強制重置選項的計數器
+if 'reset_counter' not in st.session_state:
+    st.session_state.reset_counter = 0
 
-# 【修正重點 1】將抽題邏輯改為給 on_click 專用的 Callback 函數
+# 抽題與重置邏輯
 def draw_ten_questions():
     current_ids = [(q['year'], q['subject'], q['q_num']) for q in st.session_state.get('current_quiz', [])]
     available_pool = [q for q in quiz_data if (q['year'], q['subject'], q['q_num']) not in current_ids]
@@ -38,49 +41,41 @@ def draw_ten_questions():
     st.session_state.user_answers = {}
     st.session_state.is_submitted = False
     
-    # 【修正重點 2】使用 del 刪除狀態，讓 Streamlit 自動重置為預設選項
-    for i in range(10):
-        if f"q_{i}" in st.session_state:
-            del st.session_state[f"q_{i}"]
+    # 【關鍵技巧】增加 counter，讓 Radio 按鈕的 key 變更，強制讓它重置
+    st.session_state.reset_counter += 1
 
-# 【新增】將交卷動作也寫成 Callback 函數
 def submit_quiz():
     st.session_state.is_submitted = True
 
 st.title("⚖️ 司法官/律師 一試刷題神器")
 st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
 
-# 開頭的初始抽題按鈕 (使用 on_click 觸發)
+# 開頭的初始抽題按鈕
 st.button("🎲 隨機抽取 10 題", type="primary", on_click=draw_ten_questions)
 
 st.divider()
 
-# 如果目前有題目，就印出來
 if st.session_state.current_quiz:
     for i, q in enumerate(st.session_state.current_quiz):
         st.subheader(f"第 {i+1} 題 ({q['year']}年 {q['subject']} - 原題號:{q['q_num']})")
         
-        # 題目與選項排版
         raw_text = q['text']
         formatted_text = raw_text.replace("(A) ", "\n\n**(A)** ").replace("(B) ", "\n\n**(B)** ").replace("(C) ", "\n\n**(C)** ").replace("(D) ", "\n\n**(D)** ")
-        
         st.markdown(formatted_text)
-        st.write("") 
         
         options = ["(未作答)", "A", "B", "C", "D"]
         
-        # 單選按鈕
+        # 【修正重點】key 加入 reset_counter，每次抽新題這裡的 key 就會變，按鈕會強制重置
         user_choice = st.radio(
             "請選擇你的作答：", 
             options, 
-            key=f"q_{i}",
+            key=f"q_{i}_{st.session_state.reset_counter}", 
             disabled=st.session_state.is_submitted
         )
         
         if user_choice != "(未作答)":
             st.session_state.user_answers[i] = user_choice
         
-        # 交卷後的解析與一鍵跳轉
         if st.session_state.is_submitted:
             correct_ans = q['answer']
             if user_choice == correct_ans:
@@ -92,62 +87,29 @@ if st.session_state.current_quiz:
             js_text = json.dumps(gemini_prompt)
             
             html_code = f"""
-            <div style="font-family: 'Source Sans Pro', sans-serif;">
-                <button onclick='copyAndOpen()' style="
-                    background-color: white;
-                    color: #31333F;
-                    border: 1px solid rgba(49, 51, 63, 0.2);
-                    padding: 0.5rem 1rem;
-                    border-radius: 0.5rem;
-                    cursor: pointer;
-                    font-size: 16px;
-                    font-weight: 400;
-                    display: inline-flex;
-                    align-items: center;
-                    transition: all 0.2s ease;
-                " onmouseover="this.style.borderColor='#FF4B4B'; this.style.color='#FF4B4B';" onmouseout="this.style.borderColor='rgba(49, 51, 63, 0.2)'; this.style.color='#31333F';">
-                    💬 一鍵複製並前往 Gemini 發問
-                </button>
-            </div>
             <script>
             function copyAndOpen() {{
                 const text = {js_text};
-                navigator.clipboard.writeText(text).then(function() {{
-                    window.open('https://gemini.google.com/', '_blank');
-                }}).catch(function(err) {{
-                    const textArea = document.createElement("textarea");
-                    textArea.value = text;
-                    textArea.style.position = "fixed"; 
-                    document.body.appendChild(textArea);
-                    textArea.focus();
-                    textArea.select();
-                    try {{
-                        document.execCommand('copy');
-                    }} catch (err) {{
-                        console.error('複製失敗', err);
-                    }}
-                    document.body.removeChild(textArea);
-                    window.open('https://gemini.google.com/', '_blank');
-                }});
+                navigator.clipboard.writeText(text).then(() => window.open('https://gemini.google.com/', '_blank'));
             }}
             </script>
+            <button onclick='copyAndOpen()' style="padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #ccc; cursor: pointer;">
+                💬 一鍵複製並前往 Gemini 發問
+            </button>
             """
-            components.html(html_code, height=60)
+            components.html(html_code, height=50)
             
         st.write("---")
 
-    # 底部控制按鈕區
     if not st.session_state.is_submitted:
-        # 【修正重點 3】提交答案同樣使用 on_click 觸發
         st.button("📝 提交答案", type="secondary", on_click=submit_quiz)
     else:
-        # 計算總分
         score = sum(1 for i, q in enumerate(st.session_state.current_quiz) 
                     if st.session_state.user_answers.get(i) == q['answer'])
         st.info(f"🏆 測驗結束！你答對了 **{score} / 10** 題！")
         
-        # 【修正重點 4】再抽 10 題按鈕使用 on_click 觸發
-        st.button("🔄 重新隨機抽取下一輪 10 題 (不與此輪重複)", type="primary", on_click=draw_ten_questions)
+        if st.button("🔄 重新隨機抽取下一輪 10 題 (不與此輪重複)", type="primary", on_click=draw_ten_questions):
+            pass # 按鈕點擊已透過 on_click 觸發 draw_ten_questions
             
         st.balloons()
 else:
