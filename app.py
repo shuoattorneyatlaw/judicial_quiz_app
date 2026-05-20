@@ -41,15 +41,20 @@ st.divider()
 if st.session_state.current_quiz:
     for i, q in enumerate(st.session_state.current_quiz):
         st.subheader(f"第 {i+1} 題 ({q['year']}年 {q['subject']} - 原題號:{q['q_num']})")
-        # 顯示題目
-        st.markdown(f"**{q['text']}**")
+        
+        # 【修正功能 1】強制讓題目與 (A)(B)(C)(D) 選項換行，並把選項加粗，排版更漂亮
+        raw_text = q['text']
+        formatted_text = raw_text.replace("(A) ", "\n\n**(A)** ").replace("(B) ", "\n\n**(B)** ").replace("(C) ", "\n\n**(C)** ").replace("(D) ", "\n\n**(D)** ")
+        
+        st.markdown(formatted_text)
+        st.write("") # 留一點微小的空白間隔
         
         # 讓使用者選擇答案 (A, B, C, D)
         options = ["(未作答)", "A", "B", "C", "D"]
         
         # 如果已經交卷，鎖定選項不給改
         user_choice = st.radio(
-            "請選擇答案：", 
+            "請選擇你的作答：", 
             options, 
             key=f"q_{i}",
             disabled=st.session_state.is_submitted
@@ -58,13 +63,22 @@ if st.session_state.current_quiz:
         if user_choice != "(未作答)":
             st.session_state.user_answers[i] = user_choice
         
-        # 如果已交卷，顯示解析
+        # 如果已交卷，顯示解析與問 Gemini 功能
         if st.session_state.is_submitted:
             correct_ans = q['answer']
             if user_choice == correct_ans:
                 st.success(f"✅ 答對了！正確答案是 {correct_ans}")
             else:
                 st.error(f"❌ 答錯了！你的答案: {user_choice if user_choice != '(未作答)' else '未作答'}，正確答案是: {correct_ans}")
+            
+            # 【修正功能 2】加入問 Gemini 的智慧組裝發問功能
+            # 自動建立完整的發問 Prompt（告訴 Gemini 正確答案，請它針對選項解析法條）
+            gemini_prompt = f"請幫我詳細解析這道司法官/律師一試考古題：\n\n{formatted_text}\n\n官方標準答案是 ({correct_ans})。\n請說明為什麼這個答案是正確的，並解析其他三個選項錯在哪裡、涉及哪些法條或實務見解？"
+            
+            # 利用 Streamlit 的 text_area，其右上角會自動內建「一鍵複製」按鈕
+            st.text_area("📋 點擊右上角按鈕複製題目與正確答案：", value=gemini_prompt, height=120, key=f"copy_{i}")
+            st.link_button("💬 前往 Gemini 頁面發問", "https://gemini.google.com/")
+            
         st.write("---")
 
     # 交卷按鈕
