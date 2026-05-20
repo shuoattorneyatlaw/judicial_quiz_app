@@ -133,7 +133,7 @@ if st.session_state.current_quiz:
         # 計算總分
         score = sum(1 for i, q in enumerate(st.session_state.current_quiz) 
                     if st.session_state.user_answers.get(i) == q['answer'])
-        st.info(f"🏆 測驗結束！你答對了 **{score} / 5** 題！")
+        st.info(f"🏆 測驗結束！你答對了 **{score} / 10** 題！")
         st.balloons()
 else:
-    st.info("請點擊上方的「隨機抽取 5 題」開始測驗！")
+    st.info("請點擊上方的「隨機抽取 10 題」開始測驗！")
