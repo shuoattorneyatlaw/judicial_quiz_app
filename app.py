@@ -4,7 +4,7 @@ import json
 import random
 
 # 設定網頁標題與手機版面配置
-st.set_page_config(page_title="國考一試刷題神器", page_icon="⚖️", layout="centered")
+st.set_page_config(page_title="國考一試刷題工具", page_icon="⚖️", layout="centered")
 
 # 讀取剛剛做好的題庫 (使用 cache 讓網頁瞬間載入)
 @st.cache_data
@@ -26,7 +26,7 @@ if 'user_answers' not in st.session_state:
 if 'is_submitted' not in st.session_state:
     st.session_state.is_submitted = False
 
-st.title("⚖️ 司法官/律師 一試刷題神器")
+st.title("⚖️ 司法官/律師 一試刷題工具")
 st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
 
 # 按鈕：抽取新題目
