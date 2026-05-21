@@ -25,9 +25,19 @@ if 'user_answers' not in st.session_state:
     st.session_state.user_answers = {}
 if 'is_submitted' not in st.session_state:
     st.session_state.is_submitted = False
-# 【新增】用來強制重置選項的計數器
 if 'reset_counter' not in st.session_state:
     st.session_state.reset_counter = 0
+# 【新增】初始化自動置頂訊號
+if 'scroll_to_top' not in st.session_state:
+    st.session_state.scroll_to_top = False
+
+# 【核心修正】在網頁最頂端檢查置頂訊號，若為 True 則透過主網域執行 JavaScript 捲動
+if st.session_state.scroll_to_top:
+    st.markdown(
+        '<img src="x" onerror="window.scrollTo(0,0); var el=document.querySelector(\'.main\'); if(el){el.scrollTo(0,0);}" style="display:none;">', 
+        unsafe_allow_html=True
+    )
+    st.session_state.scroll_to_top = False  # 執行完馬上重置訊號
 
 # 抽題與重置邏輯
 def draw_ten_questions():
