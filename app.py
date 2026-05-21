@@ -18,56 +18,53 @@ except FileNotFoundError:
     st.error("找不到題庫檔案 quiz_database.json！")
     st.stop()
 
-# 初始化狀態紀錄
-if 'current_quiz' not in st.session_state:
-    st.session_state.current_quiz = []
-if 'user_answers' not in st.session_state:
-    st.session_state.user_answers = {}
-if 'is_submitted' not in st.session_state:
-    st.session_state.is_submitted = False
-if 'reset_counter' not in st.session_state:
-    st.session_state.reset_counter = 0
-# 【新增】初始化自動置頂訊號
-if 'scroll_to_top' not in st.session_state:
-    st.session_state.scroll_to_top = False
+# 【全新架構】初始化多輪狀態紀錄
+# rounds 裡面會存放多個字典，每個字典代表一輪 10 題的狀態
+if 'rounds' not in st.session_state:
+    st.session_state.rounds = []
 
-# 【核心修正】在網頁最頂端檢查置頂訊號，若為 True 則透過主網域執行 JavaScript 捲動
-if st.session_state.scroll_to_top:
-    st.markdown(
-        '<img src="x" onerror="window.scrollTo(0,0); var el=document.querySelector(\'.main\'); if(el){el.scrollTo(0,0);}" style="display:none;">', 
-        unsafe_allow_html=True
-    )
-    st.session_state.scroll_to_top = False  # 執行完馬上重置訊號
-
-# 抽題與重置邏輯
+# 抽題邏輯 (現在是新增一輪，而不是覆蓋舊的)
 def draw_ten_questions():
-    current_ids = [(q['year'], q['subject'], q['q_num']) for q in st.session_state.get('current_quiz', [])]
+    # 搜集之前「所有輪次」出現過的題目 ID，確保絕對不重複
+    current_ids = [(q['year'], q['subject'], q['q_num']) 
+                   for r in st.session_state.rounds 
+                   for q in r['questions']]
+                   
     available_pool = [q for q in quiz_data if (q['year'], q['subject'], q['q_num']) not in current_ids]
     
+    # 防呆：如果題庫快抽完了，就重新重置題庫池
     if len(available_pool) < 10:
         available_pool = quiz_data
         
-    st.session_state.current_quiz = random.sample(available_pool, min(10, len(available_pool)))
-    st.session_state.user_answers = {}
-    st.session_state.is_submitted = False
+    new_quiz = random.sample(available_pool, min(10, len(available_pool)))
     
-    # 【關鍵技巧】增加 counter，讓 Radio 按鈕的 key 變更，強制讓它重置
-    st.session_state.reset_counter += 1
+    # 將新抽出的 10 題作為一個「新輪次」加入紀錄中
+    st.session_state.rounds.append({
+        "questions": new_quiz,
+        "answers": {},
+        "submitted": False
+    })
 
-def submit_quiz():
-    st.session_state.is_submitted = True
-
-st.title("⚖️ 司律 一試 刷題")
+st.title("⚖️ 司律 一試 刷題 ")
 st.write(f"目前總題庫共 **{len(quiz_data)}** 題")
 
-# 開頭的初始抽題按鈕
-st.button("🎲 隨機抽取 10 題", type="primary", on_click=draw_ten_questions)
+# 當完全沒有題目時，顯示初始的開始按鈕
+if len(st.session_state.rounds) == 0:
+    if st.button("🎲 開始隨機抽取第一輪 10 題", type="primary"):
+        draw_ten_questions()
+        st.rerun()
 
-st.divider()
-
-if st.session_state.current_quiz:
-    for i, q in enumerate(st.session_state.current_quiz):
-        st.subheader(f"第 {i+1} 題 ({q['year']}年 {q['subject']} - 原題號:{q['q_num']})")
+# 逐一渲染每一個輪次的題目
+for r_idx, current_round in enumerate(st.session_state.rounds):
+    
+    st.markdown(f"## 🏁 第 {r_idx + 1} 輪測驗")
+    st.divider()
+    
+    for i, q in enumerate(current_round['questions']):
+        # 計算累積的總題號 (例如第二輪第一題就是第 11 題)
+        global_q_num = r_idx * 10 + i + 1
+        
+        st.subheader(f"第 {global_q_num} 題 ({q['year']}年 {q['subject']} - 原題號:{q['q_num']})")
         
         raw_text = q['text']
         formatted_text = raw_text.replace("(A) ", "\n\n**(A)** ").replace("(B) ", "\n\n**(B)** ").replace("(C) ", "\n\n**(C)** ").replace("(D) ", "\n\n**(D)** ")
@@ -75,18 +72,19 @@ if st.session_state.current_quiz:
         
         options = ["(未作答)", "A", "B", "C", "D"]
         
-        # 【修正重點】key 加入 reset_counter，每次抽新題這裡的 key 就會變，按鈕會強制重置
+        # 【修正】給每個選項獨一無二的 key (輪次 + 題號)，避免互相干擾
         user_choice = st.radio(
             "請選擇你的作答：", 
             options, 
-            key=f"q_{i}_{st.session_state.reset_counter}", 
-            disabled=st.session_state.is_submitted
+            key=f"r_{r_idx}_q_{i}", 
+            disabled=current_round['submitted']
         )
         
         if user_choice != "(未作答)":
-            st.session_state.user_answers[i] = user_choice
+            current_round['answers'][i] = user_choice
         
-        if st.session_state.is_submitted:
+        # 如果該輪已經交卷，顯示解析與 Gemini 按鈕
+        if current_round['submitted']:
             correct_ans = q['answer']
             if user_choice == correct_ans:
                 st.success(f"✅ 答對了！正確答案是 {correct_ans}")
@@ -103,7 +101,7 @@ if st.session_state.current_quiz:
                 navigator.clipboard.writeText(text).then(() => window.open('https://gemini.google.com/', '_blank'));
             }}
             </script>
-            <button onclick='copyAndOpen()' style="padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #ccc; cursor: pointer;">
+            <button onclick='copyAndOpen()' style="padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #ccc; cursor: pointer; background: white; color: #333;">
                 💬 一鍵複製並前往 Gemini 發問
             </button>
             """
@@ -111,16 +109,21 @@ if st.session_state.current_quiz:
             
         st.write("---")
 
-    if not st.session_state.is_submitted:
-        st.button("📝 提交答案", type="secondary", on_click=submit_quiz)
+    # 每輪底部的結算與操作區
+    if not current_round['submitted']:
+        # 該輪未交卷時，顯示交卷按鈕
+        if st.button(f"📝 提交第 {r_idx + 1} 輪答案", type="secondary", key=f"submit_{r_idx}"):
+            current_round['submitted'] = True
+            st.rerun()
     else:
-        score = sum(1 for i, q in enumerate(st.session_state.current_quiz) 
-                    if st.session_state.user_answers.get(i) == q['answer'])
-        st.info(f"🏆 測驗結束！你答對了 **{score} / 10** 題！")
+        # 該輪已交卷時，顯示該輪分數
+        score = sum(1 for i, q in enumerate(current_round['questions']) 
+                    if current_round['answers'].get(i) == q['answer'])
+        st.info(f"🏆 第 {r_idx + 1} 輪結束！本輪答對了 **{score} / 10** 題！")
         
-        if st.button("🔄 重新隨機抽取下一輪 10 題 (不與此輪重複)", type="primary", on_click=draw_ten_questions):
-            pass # 按鈕點擊已透過 on_click 觸發 draw_ten_questions
-            
-        st.balloons()
-else:
-    st.info("請點擊上方的「隨機抽取 10 題」開始測驗！")
+        # 【核心功能】如果這是「最後一輪」，才在最底下顯示抽取下一輪的按鈕
+        if r_idx == len(st.session_state.rounds) - 1:
+            st.write("") # 留一點空間
+            if st.button("⬇️ 往下延伸：抽取下一輪 10 題 (不重複)", type="primary", key=f"next_{r_idx}"):
+                draw_ten_questions()
+                st.rerun()
